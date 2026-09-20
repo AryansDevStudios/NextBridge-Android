@@ -10,6 +10,6 @@ public class MainActivity extends BridgeActivity {
         super.onCreate(savedInstanceState);
         
         // This single line blocks screenshots and screen recordings globally
-        getWindow().setFlags(WindowManager.LayoutParams.FLAG_SECURE, WindowManager.LayoutParams.FLAG_SECURE);
+        // getWindow().setFlags(WindowManager.LayoutParams.FLAG_SECURE, WindowManager.LayoutParams.FLAG_SECURE);
     }
 }
