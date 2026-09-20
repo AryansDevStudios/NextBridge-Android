@@ -1,4 +1,4 @@
-package com.nxttoppers.app;
+package com.nextbridgedev.app;
 
 import android.os.Bundle;
 import android.view.WindowManager;
