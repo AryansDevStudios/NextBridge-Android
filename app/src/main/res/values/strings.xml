@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">nxttoppers</string>
+    <string name="title_activity_main">nxttoppers</string>
+    <string name="package_name">com.nxttoppers.app</string>
+    <string name="custom_url_scheme">com.nxttoppers.app</string>
+</resources>
