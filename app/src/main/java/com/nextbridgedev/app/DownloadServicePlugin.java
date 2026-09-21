@@ -236,4 +236,102 @@ public class DownloadServicePlugin extends Plugin {
             call.reject("Error opening PDF: " + e.getMessage());
         }
     }
+
+    @PluginMethod
+    public void sharePdf(PluginCall call) {
+        String relativePath = call.getString("path");
+        String title = call.getString("title", "Study Notes");
+        if (relativePath == null || relativePath.isEmpty()) {
+            call.reject("Missing path");
+            return;
+        }
+        try {
+            java.io.File file = new java.io.File(getContext().getFilesDir(), relativePath);
+            if (!file.exists()) {
+                call.reject("File does not exist: " + file.getAbsolutePath());
+                return;
+            }
+            android.net.Uri contentUri = androidx.core.content.FileProvider.getUriForFile(
+                getContext(),
+                getContext().getPackageName() + ".fileprovider",
+                file
+            );
+            Intent shareIntent = new Intent(Intent.ACTION_SEND);
+            shareIntent.setType("application/pdf");
+            shareIntent.putExtra(Intent.EXTRA_STREAM, contentUri);
+            shareIntent.putExtra(Intent.EXTRA_SUBJECT, title);
+            shareIntent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            Intent chooser = Intent.createChooser(shareIntent, "Share Study Notes");
+            chooser.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            chooser.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            getContext().startActivity(chooser);
+            call.resolve();
+        } catch (Exception e) {
+            call.reject("Failed to share PDF: " + e.getMessage());
+        }
+    }
+
+    @PluginMethod
+    public void saveToDeviceDownloads(PluginCall call) {
+        String relativePath = call.getString("path");
+        String fileName = call.getString("fileName", "Document.pdf");
+        if (relativePath == null || relativePath.isEmpty()) {
+            call.reject("Missing path");
+            return;
+        }
+        try {
+            java.io.File srcFile = new java.io.File(getContext().getFilesDir(), relativePath);
+            if (!srcFile.exists()) {
+                call.reject("Source file does not exist");
+                return;
+            }
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                android.content.ContentValues values = new android.content.ContentValues();
+                values.put(android.provider.MediaStore.MediaColumns.DISPLAY_NAME, fileName);
+                values.put(android.provider.MediaStore.MediaColumns.MIME_TYPE, "application/pdf");
+                values.put(android.provider.MediaStore.MediaColumns.RELATIVE_PATH, android.os.Environment.DIRECTORY_DOWNLOADS);
+
+                android.content.ContentResolver resolver = getContext().getContentResolver();
+                android.net.Uri uri = resolver.insert(android.provider.MediaStore.Downloads.EXTERNAL_CONTENT_URI, values);
+                if (uri != null) {
+                    java.io.InputStream in = new java.io.FileInputStream(srcFile);
+                    java.io.OutputStream out = resolver.openOutputStream(uri);
+                    byte[] buf = new byte[8192];
+                    int len;
+                    while ((len = in.read(buf)) > 0) {
+                        out.write(buf, 0, len);
+                    }
+                    in.close();
+                    out.close();
+
+                    JSObject ret = new JSObject();
+                    ret.put("success", true);
+                    call.resolve(ret);
+                    return;
+                }
+            }
+
+            // Legacy Android fallback
+            java.io.File downloadsDir = android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS);
+            if (!downloadsDir.exists()) downloadsDir.mkdirs();
+            java.io.File destFile = new java.io.File(downloadsDir, fileName);
+            java.io.InputStream in = new java.io.FileInputStream(srcFile);
+            java.io.OutputStream out = new java.io.FileOutputStream(destFile);
+            byte[] buf = new byte[8192];
+            int len;
+            while ((len = in.read(buf)) > 0) {
+                out.write(buf, 0, len);
+            }
+            in.close();
+            out.close();
+
+            JSObject ret = new JSObject();
+            ret.put("success", true);
+            ret.put("path", destFile.getAbsolutePath());
+            call.resolve(ret);
+        } catch (Exception e) {
+            call.reject("Failed to save to device: " + e.getMessage());
+        }
+    }
 }
