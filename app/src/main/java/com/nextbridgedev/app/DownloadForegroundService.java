@@ -502,6 +502,7 @@ public class DownloadForegroundService extends Service {
             .setOngoing(true)
             .setOnlyAlertOnce(true)
             .setPriority(NotificationCompat.PRIORITY_LOW)
+            .setColor(0xFFF59E0B)
             .setProgress(100, Math.max(0, Math.min(100, progress)), false)
             .addAction(
                 isPaused ? android.R.drawable.ic_media_play : android.R.drawable.ic_media_pause,

@@ -23,6 +23,24 @@ public class MainActivity extends BridgeActivity {
         // FLAG_SECURE is only dynamically enabled during active video playback.
         getWindow().clearFlags(WindowManager.LayoutParams.FLAG_SECURE);
 
+        // Ensure status bar (notification panel) and navigation bar match the black theme
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            getWindow().addFlags(WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS);
+            getWindow().setStatusBarColor(android.graphics.Color.parseColor("#0a0a0a"));
+            getWindow().setNavigationBarColor(android.graphics.Color.parseColor("#0a0a0a"));
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            android.view.View decor = getWindow().getDecorView();
+            int flags = decor.getSystemUiVisibility();
+            // Clear light status bar flag so icons in the status bar are WHITE/LIGHT
+            flags &= ~android.view.View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR;
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                // Clear light navigation bar flag so nav buttons are WHITE/LIGHT
+                flags &= ~android.view.View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR;
+            }
+            decor.setSystemUiVisibility(flags);
+        }
+
         requestAppPermissions();
     }
 
