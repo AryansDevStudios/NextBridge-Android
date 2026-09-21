@@ -19,6 +19,8 @@ public class MainActivity extends BridgeActivity {
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
+        setTheme(R.style.AppTheme_NoActionBar);
+
         // Enforce 32-bit ARGB window buffer with alpha channel support for popups & selection handles
         getWindow().setFormat(PixelFormat.RGBA_8888);
 
