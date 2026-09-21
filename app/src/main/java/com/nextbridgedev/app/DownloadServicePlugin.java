@@ -241,31 +241,58 @@ public class DownloadServicePlugin extends Plugin {
     public void sharePdf(PluginCall call) {
         String relativePath = call.getString("path");
         String title = call.getString("title", "Study Notes");
+        String fileName = call.getString("fileName");
         if (relativePath == null || relativePath.isEmpty()) {
             call.reject("Missing path");
             return;
         }
         try {
-            java.io.File file = new java.io.File(getContext().getFilesDir(), relativePath);
-            if (!file.exists()) {
-                call.reject("File does not exist: " + file.getAbsolutePath());
+            java.io.File srcFile = new java.io.File(getContext().getFilesDir(), relativePath);
+            if (!srcFile.exists()) {
+                call.reject("File does not exist: " + srcFile.getAbsolutePath());
                 return;
             }
+
+            // If a descriptive filename is provided, copy to cache/shared_docs with that exact name
+            java.io.File shareFile = srcFile;
+            if (fileName != null && !fileName.trim().isEmpty()) {
+                String cleanName = fileName.trim();
+                if (!cleanName.toLowerCase().endsWith(".pdf")) {
+                    cleanName += ".pdf";
+                }
+                java.io.File shareDir = new java.io.File(getContext().getCacheDir(), "shared_docs");
+                if (!shareDir.exists()) shareDir.mkdirs();
+                shareFile = new java.io.File(shareDir, cleanName);
+
+                java.io.InputStream in = new java.io.FileInputStream(srcFile);
+                java.io.OutputStream out = new java.io.FileOutputStream(shareFile);
+                byte[] buf = new byte[8192];
+                int len;
+                while ((len = in.read(buf)) > 0) {
+                    out.write(buf, 0, len);
+                }
+                in.close();
+                out.close();
+            }
+
             android.net.Uri contentUri = androidx.core.content.FileProvider.getUriForFile(
                 getContext(),
                 getContext().getPackageName() + ".fileprovider",
-                file
+                shareFile
             );
             Intent shareIntent = new Intent(Intent.ACTION_SEND);
             shareIntent.setType("application/pdf");
             shareIntent.putExtra(Intent.EXTRA_STREAM, contentUri);
             shareIntent.putExtra(Intent.EXTRA_SUBJECT, title);
+            shareIntent.putExtra(Intent.EXTRA_TEXT, title);
             shareIntent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
             Intent chooser = Intent.createChooser(shareIntent, "Share Study Notes");
             chooser.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
             chooser.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
             getContext().startActivity(chooser);
-            call.resolve();
+            JSObject ret = new JSObject();
+            ret.put("success", true);
+            call.resolve(ret);
         } catch (Exception e) {
             call.reject("Failed to share PDF: " + e.getMessage());
         }
