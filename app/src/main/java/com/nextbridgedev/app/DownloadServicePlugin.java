@@ -6,11 +6,13 @@ import android.content.pm.PackageManager;
 import android.os.Build;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
+import com.getcapacitor.JSArray;
 import com.getcapacitor.JSObject;
 import com.getcapacitor.Plugin;
 import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.CapacitorPlugin;
+import org.json.JSONArray;
 
 @CapacitorPlugin(name = "DownloadService")
 public class DownloadServicePlugin extends Plugin {
@@ -31,22 +33,66 @@ public class DownloadServicePlugin extends Plugin {
         }
     }
 
+    public static void notifyProgress(DownloadForegroundService.Task task) {
+        if (instance != null && task != null) {
+            JSObject ret = new JSObject();
+            ret.put("id", task.id);
+            ret.put("title", task.title);
+            ret.put("quality", task.quality);
+            ret.put("percent", task.percent);
+            long downloaded = task.downloadedBytes.get();
+            long total = Math.max(downloaded, task.totalBytes);
+            ret.put("downloadedBytes", downloaded);
+            ret.put("totalBytes", total);
+            ret.put("formattedDownloaded", DownloadForegroundService.formatBytes(downloaded));
+            ret.put("formattedTotal", DownloadForegroundService.formatBytes(total));
+            ret.put("speed", DownloadForegroundService.formatSpeed(task.speed));
+            ret.put("eta", DownloadForegroundService.formatEta(task.eta));
+            ret.put("status", task.status);
+            instance.notifyListeners("downloadProgress", ret);
+        }
+    }
+
+    public static void notifyCompleted(DownloadForegroundService.Task task) {
+        if (instance != null && task != null) {
+            JSObject ret = new JSObject();
+            ret.put("id", task.id);
+            ret.put("title", task.title);
+            ret.put("quality", task.quality);
+            ret.put("formattedSize", DownloadForegroundService.formatBytes(task.downloadedBytes.get()));
+            instance.notifyListeners("downloadCompleted", ret);
+        }
+    }
+
     @PluginMethod
     public void startDownload(PluginCall call) {
         try {
-            String title = call.getString("title", "Downloading Lectures...");
-            String subtext = call.getString("subtext", "Starting download...");
-            int progress = call.getInt("progress", 0);
-            boolean isPaused = call.getBoolean("isPaused", false);
-            String downloadId = call.getString("downloadId", "");
+            String id = call.getString("id", "");
+            String title = call.getString("title", "Lecture");
+            String subjectName = call.getString("subjectName", "Course");
+            String folderPath = call.getString("folderPath", "");
+            long duration = call.getInt("duration", 0);
+            String thumbnail = call.getString("thumbnail", "");
+            String quality = call.getString("quality", "720p");
+            String playlistUrl = call.getString("playlistUrl", "");
+            long totalBytes = call.getInt("totalBytes", 0);
+
+            if (id.isEmpty() || playlistUrl.isEmpty()) {
+                call.reject("Missing download id or playlist URL");
+                return;
+            }
 
             Intent intent = new Intent(getContext(), DownloadForegroundService.class);
-            intent.setAction(DownloadForegroundService.ACTION_START);
+            intent.setAction(DownloadForegroundService.ACTION_START_TASK);
+            intent.putExtra(DownloadForegroundService.EXTRA_ID, id);
             intent.putExtra(DownloadForegroundService.EXTRA_TITLE, title);
-            intent.putExtra(DownloadForegroundService.EXTRA_SUBTEXT, subtext);
-            intent.putExtra(DownloadForegroundService.EXTRA_PROGRESS, progress);
-            intent.putExtra(DownloadForegroundService.EXTRA_IS_PAUSED, isPaused);
-            intent.putExtra(DownloadForegroundService.EXTRA_DOWNLOAD_ID, downloadId);
+            intent.putExtra(DownloadForegroundService.EXTRA_SUBJECT, subjectName);
+            intent.putExtra(DownloadForegroundService.EXTRA_FOLDER, folderPath);
+            intent.putExtra(DownloadForegroundService.EXTRA_DURATION, duration);
+            intent.putExtra(DownloadForegroundService.EXTRA_THUMBNAIL, thumbnail);
+            intent.putExtra(DownloadForegroundService.EXTRA_QUALITY, quality);
+            intent.putExtra(DownloadForegroundService.EXTRA_PLAYLIST_URL, playlistUrl);
+            intent.putExtra(DownloadForegroundService.EXTRA_TOTAL_BYTES, totalBytes);
 
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 getContext().startForegroundService(intent);
@@ -60,43 +106,82 @@ public class DownloadServicePlugin extends Plugin {
     }
 
     @PluginMethod
-    public void updateProgress(PluginCall call) {
+    public void pauseDownload(PluginCall call) {
         try {
-            String title = call.getString("title", "Downloading Lectures...");
-            String subtext = call.getString("subtext", "In progress...");
-            int progress = call.getInt("progress", 0);
-            boolean isPaused = call.getBoolean("isPaused", false);
-            String downloadId = call.getString("downloadId", "");
-
+            String id = call.getString("id", "");
             Intent intent = new Intent(getContext(), DownloadForegroundService.class);
-            intent.setAction(DownloadForegroundService.ACTION_UPDATE);
-            intent.putExtra(DownloadForegroundService.EXTRA_TITLE, title);
-            intent.putExtra(DownloadForegroundService.EXTRA_SUBTEXT, subtext);
-            intent.putExtra(DownloadForegroundService.EXTRA_PROGRESS, progress);
-            intent.putExtra(DownloadForegroundService.EXTRA_IS_PAUSED, isPaused);
-            intent.putExtra(DownloadForegroundService.EXTRA_DOWNLOAD_ID, downloadId);
-
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                getContext().startForegroundService(intent);
-            } else {
-                getContext().startService(intent);
-            }
+            intent.setAction(DownloadForegroundService.ACTION_PAUSE_TASK);
+            intent.putExtra(DownloadForegroundService.EXTRA_ID, id);
+            getContext().startService(intent);
             call.resolve();
         } catch (Exception e) {
-            call.reject("Failed to update download service: " + e.getMessage());
+            call.reject("Failed to pause download: " + e.getMessage());
         }
     }
 
     @PluginMethod
-    public void stopDownload(PluginCall call) {
+    public void resumeDownload(PluginCall call) {
         try {
+            String id = call.getString("id", "");
             Intent intent = new Intent(getContext(), DownloadForegroundService.class);
-            intent.setAction(DownloadForegroundService.ACTION_STOP);
+            intent.setAction(DownloadForegroundService.ACTION_RESUME_TASK);
+            intent.putExtra(DownloadForegroundService.EXTRA_ID, id);
             getContext().startService(intent);
             call.resolve();
         } catch (Exception e) {
-            call.reject("Failed to stop download service: " + e.getMessage());
+            call.reject("Failed to resume download: " + e.getMessage());
         }
+    }
+
+    @PluginMethod
+    public void cancelDownload(PluginCall call) {
+        try {
+            String id = call.getString("id", "");
+            Intent intent = new Intent(getContext(), DownloadForegroundService.class);
+            intent.setAction(DownloadForegroundService.ACTION_CANCEL_TASK);
+            intent.putExtra(DownloadForegroundService.EXTRA_ID, id);
+            getContext().startService(intent);
+            call.resolve();
+        } catch (Exception e) {
+            call.reject("Failed to cancel download: " + e.getMessage());
+        }
+    }
+
+    @PluginMethod
+    public void getActiveTasks(PluginCall call) {
+        DownloadForegroundService service = DownloadForegroundService.getInstance();
+        JSObject ret = new JSObject();
+        if (service != null) {
+            try {
+                ret.put("tasks", new JSArray(service.getActiveTasksJson().toString()));
+            } catch (Exception e) {
+                ret.put("tasks", new JSArray());
+            }
+        } else {
+            ret.put("tasks", new JSArray());
+        }
+        call.resolve(ret);
+    }
+
+    @PluginMethod
+    public void getCompletedDownloads(PluginCall call) {
+        JSONArray arr = DownloadForegroundService.getCompletedFromRegistry(getContext());
+        JSObject ret = new JSObject();
+        try {
+            ret.put("downloads", new JSArray(arr.toString()));
+        } catch (Exception e) {
+            ret.put("downloads", new JSArray());
+        }
+        call.resolve(ret);
+    }
+
+    @PluginMethod
+    public void deleteDownload(PluginCall call) {
+        String id = call.getString("id", "");
+        if (!id.isEmpty()) {
+            DownloadForegroundService.deleteDownloadFromRegistry(getContext(), id);
+        }
+        call.resolve();
     }
 
     @PluginMethod
