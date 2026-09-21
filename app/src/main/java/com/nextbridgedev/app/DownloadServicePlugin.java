@@ -207,4 +207,33 @@ public class DownloadServicePlugin extends Plugin {
         ret.put("notifications", "requested");
         call.resolve(ret);
     }
+
+    @PluginMethod
+    public void openPdf(PluginCall call) {
+        String relativePath = call.getString("path");
+        if (relativePath == null || relativePath.isEmpty()) {
+            call.reject("Missing path");
+            return;
+        }
+        try {
+            java.io.File file = new java.io.File(getContext().getFilesDir(), relativePath);
+            if (!file.exists()) {
+                call.reject("File does not exist: " + file.getAbsolutePath());
+                return;
+            }
+            android.net.Uri contentUri = androidx.core.content.FileProvider.getUriForFile(
+                getContext(),
+                getContext().getPackageName() + ".fileprovider",
+                file
+            );
+            Intent intent = new Intent(Intent.ACTION_VIEW);
+            intent.setDataAndType(contentUri, "application/pdf");
+            intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            getContext().startActivity(intent);
+            call.resolve();
+        } catch (Exception e) {
+            call.reject("Error opening PDF: " + e.getMessage());
+        }
+    }
 }
