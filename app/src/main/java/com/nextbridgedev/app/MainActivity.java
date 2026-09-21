@@ -10,6 +10,8 @@ import android.view.WindowManager;
 import android.webkit.WebView;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
+import androidx.core.view.WindowCompat;
+import androidx.core.view.WindowInsetsControllerCompat;
 import com.getcapacitor.BridgeActivity;
 
 public class MainActivity extends BridgeActivity {
@@ -20,7 +22,10 @@ public class MainActivity extends BridgeActivity {
         // Enforce 32-bit ARGB window buffer with alpha channel support for popups & selection handles
         getWindow().setFormat(PixelFormat.RGBA_8888);
 
-        registerPlugin(ImmersiveModePlugin.class);
+        // Temporarily commented out to prevent it from altering window bounds
+        // and breaking the GPU overlay compositor for text selection.
+        // registerPlugin(ImmersiveModePlugin.class);
+
         registerPlugin(DownloadServicePlugin.class);
         super.onCreate(savedInstanceState);
 
@@ -40,17 +45,14 @@ public class MainActivity extends BridgeActivity {
             getWindow().addFlags(WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS);
             getWindow().setStatusBarColor(android.graphics.Color.parseColor("#0a0a0a"));
             getWindow().setNavigationBarColor(android.graphics.Color.parseColor("#0a0a0a"));
-        }
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            View decor = getWindow().getDecorView();
-            int flags = decor.getSystemUiVisibility();
-            // Clear light status bar flag so icons in the status bar are WHITE/LIGHT
-            flags &= ~View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR;
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                // Clear light navigation bar flag so nav buttons are WHITE/LIGHT
-                flags &= ~View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR;
+
+            // Replaces the deprecated decor.setSystemUiVisibility() which disrupts modern window compositing
+            WindowInsetsControllerCompat windowInsetsController = WindowCompat.getInsetsController(getWindow(), getWindow().getDecorView());
+            if (windowInsetsController != null) {
+                // False enforces light text/icons against the #0a0a0a dark background
+                windowInsetsController.setAppearanceLightStatusBars(false);
+                windowInsetsController.setAppearanceLightNavigationBars(false);
             }
-            decor.setSystemUiVisibility(flags);
         }
 
         requestAppPermissions();
