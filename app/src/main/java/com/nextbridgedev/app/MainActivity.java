@@ -24,22 +24,20 @@ public class MainActivity extends BridgeActivity {
         // Enforce 32-bit ARGB window buffer with alpha channel support for popups & selection handles
         getWindow().setFormat(PixelFormat.RGBA_8888);
 
-        // Temporarily commented out to prevent it from altering window bounds
-        // and breaking the GPU overlay compositor for text selection.
-        // registerPlugin(ImmersiveModePlugin.class);
-
+        registerPlugin(ImmersiveModePlugin.class);
         registerPlugin(DownloadServicePlugin.class);
         super.onCreate(savedInstanceState);
 
-        // Ensure the WebView backing layer is hardware-accelerated for proper clipping
+        // Ensure the WebView backing layer is hardware-accelerated for proper clipping and allows text selection
         if (this.bridge != null && this.bridge.getWebView() != null) {
             WebView webView = this.bridge.getWebView();
             webView.setLayerType(View.LAYER_TYPE_HARDWARE, null);
+            webView.setLongClickable(true);
+            webView.setHapticFeedbackEnabled(true);
         }
 
-        // Ensure FLAG_SECURE is cleared by default so screenshots/screen recording
-        // are allowed across the normal GUI, notes, and profile.
-        // FLAG_SECURE is only dynamically enabled during active video playback.
+        // Ensure FLAG_SECURE is cleared so screenshots/screen recording
+        // and text copying are completely permitted across the entire app, notes, and PDFs.
         getWindow().clearFlags(WindowManager.LayoutParams.FLAG_SECURE);
 
         // Ensure status bar (notification panel) and navigation bar match the black theme
@@ -58,6 +56,41 @@ public class MainActivity extends BridgeActivity {
         }
 
         requestAppPermissions();
+    }
+
+    private boolean isVideoPlaying = false;
+
+    public void setVideoPlaying(boolean playing) {
+        this.isVideoPlaying = playing;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            try {
+                android.app.PictureInPictureParams.Builder builder = new android.app.PictureInPictureParams.Builder();
+                builder.setAspectRatio(new android.util.Rational(16, 9));
+                builder.setAutoEnterEnabled(playing);
+                setPictureInPictureParams(builder.build());
+            } catch (Exception ignored) {}
+        }
+    }
+
+    @Override
+    protected void onUserLeaveHint() {
+        super.onUserLeaveHint();
+        if (isVideoPlaying && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            try {
+                android.app.PictureInPictureParams.Builder builder = new android.app.PictureInPictureParams.Builder();
+                builder.setAspectRatio(new android.util.Rational(16, 9));
+                enterPictureInPictureMode(builder.build());
+            } catch (Exception ignored) {}
+        }
+    }
+
+    @Override
+    public void onPictureInPictureModeChanged(boolean isInPictureInPictureMode, android.content.res.Configuration newConfig) {
+        super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig);
+        if (this.bridge != null) {
+            String script = "window.dispatchEvent(new CustomEvent('app:pip-mode-change', { detail: { isPip: " + isInPictureInPictureMode + " } }));";
+            this.bridge.eval(script, null);
+        }
     }
 
     private void requestAppPermissions() {

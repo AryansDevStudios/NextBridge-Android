@@ -361,4 +361,50 @@ public class DownloadServicePlugin extends Plugin {
             call.reject("Failed to save to device: " + e.getMessage());
         }
     }
+    @PluginMethod
+    public void installApk(PluginCall call) {
+        String base64 = call.getString("base64");
+        String fileName = call.getString("fileName", "update.apk");
+
+        if (base64 == null || base64.isEmpty()) {
+            call.reject("Missing base64 APK data");
+            return;
+        }
+
+        try {
+            // Decode base64 → raw bytes
+            byte[] apkBytes = android.util.Base64.decode(base64, android.util.Base64.DEFAULT);
+
+            // Write APK to cache directory where FileProvider can serve it
+            java.io.File apkDir = new java.io.File(getContext().getCacheDir(), "apk_updates");
+            if (!apkDir.exists()) apkDir.mkdirs();
+            java.io.File apkFile = new java.io.File(apkDir, fileName);
+
+            java.io.FileOutputStream fos = new java.io.FileOutputStream(apkFile);
+            fos.write(apkBytes);
+            fos.close();
+
+            // Get a content URI for the APK via FileProvider (required on Android 7+)
+            android.net.Uri apkUri = androidx.core.content.FileProvider.getUriForFile(
+                getContext(),
+                getContext().getPackageName() + ".fileprovider",
+                apkFile
+            );
+
+            // Fire the install intent — Android will show the package installer
+            // which automatically prompts "Install unknown apps" if needed
+            Intent installIntent = new Intent(Intent.ACTION_VIEW);
+            installIntent.setDataAndType(apkUri, "application/vnd.android.package-archive");
+            installIntent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            installIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            getContext().startActivity(installIntent);
+
+            JSObject ret = new JSObject();
+            ret.put("success", true);
+            call.resolve(ret);
+        } catch (Exception e) {
+            call.reject("Failed to install APK: " + e.getMessage());
+        }
+    }
 }
+
